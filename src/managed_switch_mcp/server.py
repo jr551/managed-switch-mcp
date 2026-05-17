@@ -10,7 +10,7 @@ from typing import Any
 
 from mcp.server.fastmcp import FastMCP
 
-from . import parsers
+from . import parsers, writes
 from .client import SwitchClient, SwitchConfig
 
 log = logging.getLogger("managed-switch-mcp")
@@ -214,6 +214,372 @@ async def get_users() -> list[str]:
     html = await _get_client().fetch("/user.cgi")
     return parsers.parse_users(html)
 
+
+# ---------- write tools ----------
+#
+# Every tool below MUTATES the running configuration. Three "catastrophic"
+# operations (set_ip_config, change_admin_password, clear_mac_table) require
+# both `SWITCH_ALLOW_DANGEROUS=1` to be set in the server's environment AND
+# an explicit `confirm` argument. Factory reset and firmware upload are
+# deliberately not exposed at all — do those via the web UI.
+
+@mcp.tool()
+async def set_device_name(name: str) -> dict[str, str]:
+    """Rename the switch (1-32 chars). Reversible, low risk."""
+    await writes.set_device_name(_get_client(), name)
+    return {"status": "ok", "name": name}
+
+
+@mcp.tool()
+async def set_port_settings(
+    ports: list[str],
+    state: str | None = None,
+    duplex: str | None = None,
+    speed: str | None = None,
+    flow_control: str | None = None,
+) -> dict[str, Any]:
+    """Apply state/duplex/speed/flow-control to one or more ports.
+
+    `state` ∈ {Enable, Disable}; `duplex` ∈ {Auto, Full Duplex, Half Duplex};
+    regular ports `speed` ∈ {Auto, 10M, 100M, 1000M, 2500M}; Port 9 (SFP+)
+    `speed` ∈ {Auto, 100M, 1000M, 2500M, 10G}; `flow_control` ∈ {On, Off}.
+    Port 9 cannot be combined with other ports in one call.
+    """
+    await writes.set_port_settings(
+        _get_client(),
+        ports=ports,
+        state=state,
+        duplex=duplex,
+        speed=speed,
+        flow_control=flow_control,
+    )
+    return {"status": "ok", "ports": ports}
+
+
+@mcp.tool()
+async def clear_port_statistics() -> dict[str, str]:
+    """Reset every port's TX/RX counter to zero. Does not drop traffic."""
+    await writes.clear_port_statistics(_get_client())
+    return {"status": "ok"}
+
+
+@mcp.tool()
+async def set_port_rate_limit(
+    ports: list[str],
+    ingress_kbps: int | None = None,
+    egress_kbps: int | None = None,
+) -> dict[str, Any]:
+    """Cap port bandwidth in Kbit/sec. Pass null to clear that direction.
+
+    Range 16-2,500,000 for regular ports, 16-10,000,000 for Port 9 (SFP+).
+    """
+    await writes.set_port_rate_limit(
+        _get_client(),
+        ports=ports,
+        ingress_kbps=ingress_kbps,
+        egress_kbps=egress_kbps,
+    )
+    return {"status": "ok"}
+
+
+@mcp.tool()
+async def set_storm_control(
+    ports: list[str],
+    broadcast_kbps: int | None = None,
+    known_multicast_kbps: int | None = None,
+    unknown_multicast_kbps: int | None = None,
+    unknown_unicast_kbps: int | None = None,
+) -> dict[str, Any]:
+    """Per-port storm-control rates. Same Kbit/sec ranges as rate-limit."""
+    await writes.set_storm_control(
+        _get_client(),
+        ports=ports,
+        broadcast_kbps=broadcast_kbps,
+        known_multicast_kbps=known_multicast_kbps,
+        unknown_multicast_kbps=unknown_multicast_kbps,
+        unknown_unicast_kbps=unknown_unicast_kbps,
+    )
+    return {"status": "ok"}
+
+
+@mcp.tool()
+async def set_port_isolation(ports: list[str], isolated_from: list[str]) -> dict[str, Any]:
+    """For each of `ports`, deny forwarding to every port in `isolated_from`."""
+    await writes.set_port_isolation(
+        _get_client(), ports=ports, isolated_from=isolated_from
+    )
+    return {"status": "ok"}
+
+
+@mcp.tool()
+async def set_port_mirror(
+    source_ports: list[str],
+    destination_port: str,
+    direction: str = "Both",
+    group: int = 1,
+) -> dict[str, Any]:
+    """Configure a SPAN session. `direction` ∈ {Both, Rx, Tx}."""
+    await writes.set_port_mirror(
+        _get_client(),
+        group=group,
+        source_ports=source_ports,
+        direction=direction,
+        destination_port=destination_port,
+    )
+    return {"status": "ok"}
+
+
+@mcp.tool()
+async def delete_port_mirror() -> dict[str, str]:
+    """Remove the active port-mirror configuration."""
+    await writes.delete_port_mirror(_get_client())
+    return {"status": "ok"}
+
+
+@mcp.tool()
+async def set_loop_protocol(
+    function: str,
+    interval_seconds: int = 2,
+    recover_seconds: int = 10,
+) -> dict[str, Any]:
+    """Set loop-prevention mode. `function` ∈ {Off, Loop Detection, Spanning Tree}."""
+    await writes.set_loop_protocol(
+        _get_client(),
+        function=function,
+        interval_seconds=interval_seconds,
+        recover_seconds=recover_seconds,
+    )
+    return {"status": "ok"}
+
+
+@mcp.tool()
+async def set_stp_global(
+    version: str = "RSTP",
+    priority: int = 32768,
+    max_age: int = 20,
+    hello_time: int = 2,
+    forward_delay: int = 15,
+) -> dict[str, Any]:
+    """Global STP parameters. Constraint: 2*(forward_delay-1) ≥ max_age ≥ 2*(hello_time+1)."""
+    await writes.set_stp_global(
+        _get_client(),
+        version=version,
+        priority=priority,
+        max_age=max_age,
+        hello_time=hello_time,
+        forward_delay=forward_delay,
+    )
+    return {"status": "ok"}
+
+
+@mcp.tool()
+async def set_stp_port(
+    ports: list[str],
+    path_cost: int = 0,
+    priority: int = 128,
+    p2p: str = "Auto",
+    edge: str = "No",
+) -> dict[str, Any]:
+    """Per-port STP. `path_cost`=0 means Auto. `p2p` ∈ {Yes,No,Auto}; `edge` ∈ {Yes,No}."""
+    await writes.set_stp_port(
+        _get_client(),
+        ports=ports,
+        path_cost=path_cost,
+        priority=priority,
+        p2p=p2p,
+        edge=edge,
+    )
+    return {"status": "ok"}
+
+
+@mcp.tool()
+async def set_port_priority_queue(ports: list[str], queue: int) -> dict[str, Any]:
+    """Map ports to a QoS egress queue (1..8)."""
+    await writes.set_port_priority_queue(_get_client(), ports=ports, queue=queue)
+    return {"status": "ok"}
+
+
+@mcp.tool()
+async def set_queue_weight(queues: list[int], weight: int | str) -> dict[str, Any]:
+    """Set queue scheduling weight (1..15) or "strict" for strict priority."""
+    await writes.set_queue_weight(_get_client(), queues=queues, weight=weight)
+    return {"status": "ok"}
+
+
+@mcp.tool()
+async def set_igmp_enabled(enabled: bool) -> dict[str, Any]:
+    """Toggle IGMP snooping."""
+    await writes.set_igmp_enabled(_get_client(), enabled=enabled)
+    return {"status": "ok", "igmp_enabled": enabled}
+
+
+@mcp.tool()
+async def set_igmp_static_router_ports(ports: list[str]) -> dict[str, Any]:
+    """Replace the static IGMP router-port list (pass [] to clear)."""
+    await writes.set_igmp_static_router_ports(_get_client(), ports=ports)
+    return {"status": "ok", "ports": ports}
+
+
+@mcp.tool()
+async def set_dhcp_snooping_enabled(enabled: bool) -> dict[str, Any]:
+    """Toggle DHCP snooping."""
+    await writes.set_dhcp_snooping_enabled(_get_client(), enabled=enabled)
+    return {"status": "ok", "dhcp_snooping_enabled": enabled}
+
+
+@mcp.tool()
+async def set_jumbo_frame_enabled(enabled: bool) -> dict[str, Any]:
+    """Toggle jumbo frame support."""
+    await writes.set_jumbo_frame_enabled(_get_client(), enabled=enabled)
+    return {"status": "ok", "jumbo_frame_enabled": enabled}
+
+
+@mcp.tool()
+async def set_jumbo_frame_size(size_bytes: int) -> dict[str, Any]:
+    """Set max jumbo size. Allowed: 1522, 1536, 1552, 9216, 10000, 12000."""
+    await writes.set_jumbo_frame_size(_get_client(), size_bytes=size_bytes)
+    return {"status": "ok", "size_bytes": size_bytes}
+
+
+@mcp.tool()
+async def add_static_mac(mac: str, vlan: int, port: str) -> dict[str, Any]:
+    """Pin a MAC to a port in a VLAN. MAC format AA:BB:CC:DD:EE:FF."""
+    await writes.add_static_mac(_get_client(), mac=mac, vlan=vlan, port=port)
+    return {"status": "ok", "mac": mac, "vlan": vlan, "port": port}
+
+
+@mcp.tool()
+async def delete_static_mac(mac: str, vlan: int) -> dict[str, Any]:
+    """Remove a static MAC entry."""
+    await writes.delete_static_mac(_get_client(), mac=mac, vlan=vlan)
+    return {"status": "ok", "mac": mac, "vlan": vlan}
+
+
+@mcp.tool()
+async def clear_mac_table(confirm: str) -> dict[str, str]:
+    """Flush every learned MAC. Pass `confirm="clear_mac_table"`. Requires SWITCH_ALLOW_DANGEROUS=1."""
+    await writes.clear_mac_table(_get_client(), confirm=confirm)
+    return {"status": "ok"}
+
+
+@mcp.tool()
+async def set_vlan_management_enabled(enabled: bool) -> dict[str, Any]:
+    """Globally enable/disable VLAN management."""
+    await writes.set_vlan_management_enabled(_get_client(), enabled=enabled)
+    return {"status": "ok", "vlan_management_enabled": enabled}
+
+
+@mcp.tool()
+async def add_vlan(vid: int, name: str = "") -> dict[str, Any]:
+    """Create a static VLAN."""
+    await writes.add_vlan(_get_client(), vid=vid, name=name)
+    return {"status": "ok", "vid": vid, "name": name}
+
+
+@mcp.tool()
+async def delete_vlan(vid: int) -> dict[str, Any]:
+    """Remove a static VLAN."""
+    await writes.delete_vlan(_get_client(), vid=vid)
+    return {"status": "ok", "vid": vid}
+
+
+@mcp.tool()
+async def set_port_vlan_access(ports: list[str], access_vlan: int) -> dict[str, Any]:
+    """Set ports as untagged access members of `access_vlan`."""
+    await writes.set_port_vlan_access(
+        _get_client(), ports=ports, access_vlan=access_vlan
+    )
+    return {"status": "ok"}
+
+
+@mcp.tool()
+async def set_port_vlan_trunk(
+    ports: list[str],
+    native_vlan: int,
+    allowed_vlans: list[int],
+) -> dict[str, Any]:
+    """Configure ports as 802.1Q trunks with a native VLAN and an allowed set."""
+    await writes.set_port_vlan_trunk(
+        _get_client(),
+        ports=ports,
+        native_vlan=native_vlan,
+        allowed_vlans=allowed_vlans,
+    )
+    return {"status": "ok"}
+
+
+@mcp.tool()
+async def create_port_aggregation(
+    group: int, trunk_type: str, ports: list[str]
+) -> dict[str, Any]:
+    """Create a static or LACP link-aggregation group (group ∈ {1,2})."""
+    await writes.create_port_aggregation(
+        _get_client(), group=group, trunk_type=trunk_type, ports=ports
+    )
+    return {"status": "ok"}
+
+
+@mcp.tool()
+async def delete_port_aggregation(group: int) -> dict[str, Any]:
+    """Remove a LAG."""
+    await writes.delete_port_aggregation(_get_client(), group=group)
+    return {"status": "ok"}
+
+
+@mcp.tool()
+async def save_running_config() -> dict[str, str]:
+    """Persist running config to flash. Without this, changes revert on reboot."""
+    await writes.save_running_config(_get_client())
+    return {"status": "ok"}
+
+
+@mcp.tool()
+async def reboot_device(confirm: str) -> dict[str, str]:
+    """Reboot the switch. Pass `confirm="reboot"`. Disrupts traffic for ~30s."""
+    await writes.reboot_device(_get_client(), confirm=confirm)
+    return {"status": "ok"}
+
+
+@mcp.tool()
+async def set_ip_config(
+    mode: str,
+    confirm: str,
+    ip: str | None = None,
+    netmask: str | None = None,
+    gateway: str | None = None,
+) -> dict[str, Any]:
+    """Change the management IP. **Can lock you out**.
+
+    `mode` ∈ {static, dhcp}. Requires SWITCH_ALLOW_DANGEROUS=1 and
+    `confirm="set_ip_config"`.
+    """
+    await writes.set_ip_config(
+        _get_client(),
+        mode=mode,
+        ip=ip,
+        netmask=netmask,
+        gateway=gateway,
+        confirm=confirm,
+    )
+    return {"status": "ok"}
+
+
+@mcp.tool()
+async def change_admin_password(
+    username: str, new_password: str, confirm: str
+) -> dict[str, Any]:
+    """Replace the admin credentials. **Can lock you out.** Requires
+    SWITCH_ALLOW_DANGEROUS=1 and `confirm="change_admin_password"`."""
+    await writes.change_admin_password(
+        _get_client(),
+        username=username,
+        new_password=new_password,
+        confirm=confirm,
+    )
+    return {"status": "ok", "username": username}
+
+
+# ---------- read tool: backup_config ----------
 
 @mcp.tool()
 async def backup_config(save_path: str | None = None) -> dict[str, Any]:

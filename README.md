@@ -1,21 +1,25 @@
 # managed-switch-mcp
 
-A **read-only** [Model Context Protocol](https://modelcontextprotocol.io) server that lets an LLM client query an OEM Realtek-based managed switch shipped on AliExpress as the **GT-ST018M** (and clones with the same web UI).
+A [Model Context Protocol](https://modelcontextprotocol.io) server that lets an LLM client read and configure an OEM Realtek-based managed switch shipped on AliExpress as the **GT-ST018M** (and clones with the same web UI).
 
-It speaks to the device over plain HTTP, logs in with the OEM's quirky MD5 challenge, scrapes the CGI pages, and exposes the data as a tidy set of MCP tools — without ever changing a single config value on the switch.
+It speaks to the device over plain HTTP, logs in with the OEM's quirky MD5 challenge, scrapes the CGI pages for reads, and posts the same form bodies the web UI uses for writes.
+
+Ships with **22 read tools** and **28 write tools**. Three catastrophic write operations are gated behind an env var; factory reset and firmware upload are not exposed at all.
 
 > ⚠️ The switch ships with **HTTP only** and a **default admin/admin** credential. Treat it as untrusted-network gear. See [`RESEARCH.md`](./RESEARCH.md) for what we learned poking at it.
 
-## Why "read-only"?
+## Safety model
 
-The original ask was: *probe and look around, but don't break my network*. So every tool here either:
+The original ask was: *probe and look around, but don't break my network*. Writes were added later and are designed so that an LLM *cannot* brick the switch by accident:
 
-1. Issues a plain `GET` to a CGI page, or
-2. Issues a `POST` whose **only** side-effect is on the current HTTP session's display state (e.g. setting the MAC table page size to 30).
-
-No tool ever writes config, reboots, factory-resets, modifies users, or applies anything. The dangerous endpoints (`/reboot.cgi`, `/reset.cgi`, `/fwug.cgi`, `/save.cgi`, `/user.cgi` POST, `/ip.cgi` POST, port-state changes, VLAN changes…) are deliberately **not** wired up.
+- **Read tools** issue only `GET` requests, or `POST`s whose only effect is session-scoped display state (e.g. MAC-table pagination).
+- **Normal write tools** mirror what a clued-up admin would do on the web UI — port speed, VLANs, STP, QoS, IGMP, jumbo frames, static MACs, LAGs, save, reboot. `reboot_device` requires `confirm="reboot"`.
+- **Dangerous writes** (`clear_mac_table`, `set_ip_config`, `change_admin_password`) are gated behind `SWITCH_ALLOW_DANGEROUS=1` *and* an exact-match `confirm` arg. By default they refuse with `PermissionError`.
+- **Factory reset and firmware upload are not exposed at all.** Use the web UI for those.
 
 ## Tools
+
+### Read
 
 | Tool | What it returns |
 |---|---|
@@ -41,6 +45,40 @@ No tool ever writes config, reboots, factory-resets, modifies users, or applies 
 | `get_ip_config` | Management IP / mask / gateway / DHCP mode |
 | `get_users` | Configured admin usernames (never passwords) |
 | `backup_config` | Download the binary `switch_cfg.bin` (base64 in response, or save to disk) |
+
+### Write (normal)
+
+| Tool | What it does |
+|---|---|
+| `set_device_name` | Rename the switch (1–32 chars) |
+| `set_port_settings` | Apply state/duplex/speed/flow to one or more ports |
+| `clear_port_statistics` | Zero every port's TX/RX counters |
+| `set_port_rate_limit` | Cap port bandwidth in Kbit/sec |
+| `set_storm_control` | Per-port storm-control rates |
+| `set_port_isolation` | Deny forwarding from `ports` to `isolated_from` |
+| `set_port_mirror`, `delete_port_mirror` | Configure / remove a SPAN session |
+| `set_loop_protocol` | Off / Loop Detection / Spanning Tree + timers |
+| `set_stp_global`, `set_stp_port` | STP parameters |
+| `set_port_priority_queue`, `set_queue_weight` | QoS |
+| `set_igmp_enabled`, `set_igmp_static_router_ports` | IGMP snooping |
+| `set_dhcp_snooping_enabled` | DHCP snooping toggle |
+| `set_jumbo_frame_enabled`, `set_jumbo_frame_size` | Jumbo frames |
+| `add_static_mac`, `delete_static_mac` | Static MAC entries |
+| `set_vlan_management_enabled`, `add_vlan`, `delete_vlan` | VLAN definitions |
+| `set_port_vlan_access`, `set_port_vlan_trunk` | Per-port VLAN assignment |
+| `create_port_aggregation`, `delete_port_aggregation` | LAGs |
+| `save_running_config` | Persist current config to flash |
+| `reboot_device` | Reboot (`confirm="reboot"`) |
+
+### Write (dangerous — gated behind `SWITCH_ALLOW_DANGEROUS=1`)
+
+| Tool | Why it's gated |
+|---|---|
+| `clear_mac_table` | Briefly drops everything until tables relearn |
+| `set_ip_config` | Wrong settings → you can no longer reach the switch |
+| `change_admin_password` | Wrong settings → you can no longer log in |
+
+All three additionally require an exact-match `confirm` argument.
 
 ## Install
 
@@ -104,9 +142,24 @@ The login page computes `md5(username + password)` in JavaScript, drops it into 
 ```
 src/managed_switch_mcp/
 ├── client.py     # auth + HTTP session
-├── parsers.py    # BeautifulSoup parsers, one per CGI page
+├── parsers.py    # BeautifulSoup parsers, one per CGI page (reads)
+├── writes.py     # form builders for every write endpoint
 ├── server.py     # FastMCP server + tool definitions
 └── tests/smoke.py
+
+skills/managed-switch/SKILL.md   # Claude Code skill that drives these tools
+```
+
+## Claude Code skill
+
+There's also a [Claude Code skill](https://docs.claude.com/en/docs/claude-code/skills) bundled at
+`skills/managed-switch/SKILL.md` that documents when to invoke the tools and how
+to use them safely (read-before-write, confirm before applying, save after
+finishing). Install it with:
+
+```bash
+mkdir -p ~/.claude/skills/managed-switch
+cp skills/managed-switch/SKILL.md ~/.claude/skills/managed-switch/
 ```
 
 ## License
