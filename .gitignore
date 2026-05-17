@@ -1,0 +1,16 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.env
+.env.*
+!.env.example
+dist/
+build/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.bin
+switch_cfg.bin
+.DS_Store
