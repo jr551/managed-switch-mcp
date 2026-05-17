@@ -1,6 +1,6 @@
-# managed-switch-mcp
+# goodtop-switch-mcp
 
-A [Model Context Protocol](https://modelcontextprotocol.io) server that lets an LLM client read and configure an OEM Realtek-based managed switch shipped on AliExpress as the **GT-ST018M** (and clones with the same web UI).
+A [Model Context Protocol](https://modelcontextprotocol.io) server that lets an LLM client read and configure a **GoodTop GT-ST018M** managed switch — an 8×2.5GbE + 1×10G-SFP+ box sold on AliExpress / Newegg under the GoodTop brand, ODM'd by Shenzhen HongRui (OUI `1C:2A:A3`). The same Realtek-SDK-style web UI ships on a few clones, so this server may work against those too — issues welcome.
 
 It speaks to the device over plain HTTP, logs in with the OEM's quirky MD5 challenge, scrapes the CGI pages for reads, and posts the same form bodies the web UI uses for writes.
 
@@ -83,8 +83,8 @@ All three additionally require an exact-match `confirm` argument.
 ## Install
 
 ```bash
-git clone https://github.com/<you>/managed-switch-mcp.git
-cd managed-switch-mcp
+git clone https://github.com/jr551/goodtop-switch-mcp.git
+cd goodtop-switch-mcp
 python3 -m venv .venv
 .venv/bin/pip install -e .
 ```

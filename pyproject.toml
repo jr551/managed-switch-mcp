@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "managed-switch-mcp"
 version = "0.1.0"
-description = "Read-only MCP server for GT-ST018M / generic Realtek-based managed switches"
+description = "MCP server for GoodTop GT-ST018M managed switches (and clones with the same web UI) — read + write tools over the OEM HTTP UI"
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "MIT" }

@@ -1,6 +1,6 @@
-# GT-ST018M research notes
+# GoodTop GT-ST018M research notes
 
-Notes from poking at a **GT-ST018M** managed switch sourced via AliExpress (firmware **V200.1.8**, MAC OUI `1C:2A:A3` — registered to Shenzhen-area trading shells with no usable vendor record). The web UI also identifies the device by its model string and is shared verbatim with several other AliExpress-listed "Hasivo / KuWFi / cheap 2.5G managed" models, so this almost certainly applies to clones with the same firmware as well.
+Notes from poking at a **GoodTop GT-ST018M** managed switch (firmware **V200.1.8**). Hardware is ODM'd by **Shenzhen HongRui Optical Technology** (registered to OUI `1C:2A:A3`, MA-L block issued 2019-08-13). GoodTop sells the unit on AliExpress and Newegg; the manual and firmware live at `goodtop-tech.com`. The web UI is a stock Realtek-SDK affair, so this very likely also works against AliExpress clones that ship the same UI — issues welcome if you have one.
 
 > Everything here was learned with **owner-authorised** read-only probing of one switch on a private LAN. Nothing here is an unpatched zero-day or a remote exploit — it's local hardware-hacking against a device you have on your desk. Don't aim any of this at gear you don't own.
 

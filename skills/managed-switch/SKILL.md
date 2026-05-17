@@ -1,13 +1,14 @@
 ---
-name: managed-switch
-description: Inspect and configure a GT-ST018M (or compatible Realtek-based AliExpress) managed switch via the managed-switch MCP server. Use when the user asks about port status, MAC table / who is plugged in where, VLANs, STP/loop prevention, traffic counters, IGMP / DHCP snooping, jumbo frames, link aggregation, port mirroring, rate limits, storm control, the management IP, backing up the config — or when they want to *change* any of those things on the switch.
+name: goodtop-switch
+description: Inspect and configure a GoodTop GT-ST018M (or compatible Realtek-SDK based AliExpress) managed switch via the goodtop-switch MCP server. Use when the user asks about port status, MAC table / who is plugged in where, VLANs, STP/loop prevention, traffic counters, IGMP / DHCP snooping, jumbo frames, link aggregation, port mirroring, rate limits, storm control, the management IP, backing up the config — or when they want to *change* any of those things on the switch.
 ---
 
-# Managed Switch
+# GoodTop Switch
 
-This skill drives a GT-ST018M (also sold under various unbranded AliExpress
-SKUs) via the `managed-switch` MCP server. The server exposes ~22 read tools
-and ~28 write tools, all over the OEM HTTP web UI.
+This skill drives a GoodTop GT-ST018M (8×2.5GbE + 1×10G SFP+, sold by
+GoodTop on AliExpress / Newegg, ODM'd by Shenzhen HongRui) via the
+`managed-switch` MCP server. The server exposes ~22 read tools and ~28
+write tools, all over the OEM HTTP web UI.
 
 ## When to invoke
 
