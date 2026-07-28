@@ -3,7 +3,7 @@
 Calls every read-only tool, prints a short summary, and exits non-zero on
 any failure. Intended for development against your own hardware:
 
-    SWITCH_HOST=192.168.16.3 python -m managed_switch_mcp.tests.smoke
+    SWITCH_HOST=192.0.2.1 python -m managed_switch_mcp.tests.smoke
 """
 
 from __future__ import annotations
