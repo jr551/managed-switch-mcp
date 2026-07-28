@@ -94,11 +94,19 @@ python3 -m venv .venv
 Set environment variables (or copy `.env.example` to `.env` and source it):
 
 ```bash
-export SWITCH_HOST=192.168.16.3
+export SWITCH_HOST=192.0.2.1
 export SWITCH_USERNAME=admin
 export SWITCH_PASSWORD=admin
 export SWITCH_TIMEOUT=10
 ```
+
+`192.0.2.1` above is a documentation placeholder (RFC 5737 TEST-NET-1), not a
+real device — set `SWITCH_HOST` to your switch's actual management IP. Keep
+real values in a local `.env` (see `.env.example`); it's gitignored and
+should never be committed. `admin`/`admin` is the switch vendor's documented
+factory-default credential, not a secret — consider changing it via
+`change_admin_password` (gated behind `SWITCH_ALLOW_DANGEROUS=1`) once you've
+confirmed the server works.
 
 ## Run
 
@@ -116,7 +124,7 @@ The server speaks MCP over stdio:
     "managed-switch": {
       "command": "/absolute/path/to/managed-switch-mcp/.venv/bin/managed-switch-mcp",
       "env": {
-        "SWITCH_HOST": "192.168.16.3",
+        "SWITCH_HOST": "192.0.2.1",
         "SWITCH_USERNAME": "admin",
         "SWITCH_PASSWORD": "admin"
       }

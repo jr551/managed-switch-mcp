@@ -38,7 +38,7 @@ class SwitchConfig:
 
     @classmethod
     def from_env(cls) -> "SwitchConfig":
-        host = os.environ.get("SWITCH_HOST", "192.168.16.3").strip()
+        host = os.environ.get("SWITCH_HOST", "192.0.2.1").strip()
         if host.startswith("http://") or host.startswith("https://"):
             host = host.split("://", 1)[1]
         host = host.rstrip("/")

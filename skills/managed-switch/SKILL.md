@@ -12,7 +12,7 @@ write tools, all over the OEM HTTP web UI.
 
 ## When to invoke
 
-- User mentions "the switch", "the managed switch", "192.168.16.3" (the
+- User mentions "the switch", "the managed switch", "192.0.2.1" (the
   default mgmt IP), GT-ST018M, or specific switch concepts (VLAN, MAC table,
   STP, port mirror, LACP, IGMP snooping, jumbo frames, port channel).
 - User wants to know who is plugged in where, see traffic counters, find a
